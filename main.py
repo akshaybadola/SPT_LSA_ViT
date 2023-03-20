@@ -1,3 +1,4 @@
+import datetime
 from utils.mix import cutmix_data, mixup_data, mixup_criterion
 import numpy as np
 import random
@@ -20,7 +21,7 @@ import argparse
 from utils.scheduler import build_scheduler
 from utils.dataloader import datainfo, dataload
 from models.create_model import create_model
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings("ignore", category=Warning)
@@ -32,7 +33,7 @@ MODELS = ['vit', 'swin', 'pit', 'cait', 't2t']
 def init_parser():
     parser = argparse.ArgumentParser(description='CIFAR10 quick training script')
     # Data args
-    parser.add_argument('--data_path', default='./dataset', type=str, help='dataset path')
+    parser.add_argument('--data_path', default='./data', type=str, help='dataset path')
     parser.add_argument('--dataset', default='CIFAR10', choices=['CIFAR10', 'CIFAR100', 'T-IMNET', 'SVHN'], type=str, help='Image Net dataset path')
     parser.add_argument('-j', '--workers', default=4, type=int, metavar='N', help='number of data loading workers (default: 4)')
     parser.add_argument('--print-freq', default=1, type=int, metavar='N', help='log frequency (by iteration)')
@@ -71,6 +72,7 @@ def init_parser():
     parser.add_argument('--re_r1', default=0.3, type=float, help='aspect of erasing area')
     parser.add_argument('--is_LSA', action='store_true', help='Locality Self-Attention')
     parser.add_argument('--is_SPT', action='store_true', help='Shifted Patch Tokenization')
+    parser.add_argument('--swiglu', action='store_true', help='Use swiglu')
     return parser
 
 
@@ -238,7 +240,7 @@ def main(args):
         print('*'*80)
         print(Style.RESET_ALL)
 
-        writer.add_scalar("Learning Rate", lr, epoch)
+        # writer.add_scalar("Learning Rate", lr, epoch)
 
 
     print(Fore.RED+'*'*80)
@@ -343,8 +345,8 @@ def train(train_loader, model, criterion, optimizer, epoch, scheduler,  args):
 
     logger_dict.update(keys[0], avg_loss)
     logger_dict.update(keys[1], avg_acc1)
-    writer.add_scalar("Loss/train", avg_loss, epoch)
-    writer.add_scalar("Acc/train", avg_acc1, epoch)
+    # writer.add_scalar("Loss/train", avg_loss, epoch)
+    # writer.add_scalar("Acc/train", avg_acc1, epoch)
 
     return lr
 
@@ -380,8 +382,8 @@ def validate(val_loader, model, criterion, lr, args, epoch=None):
     logger_dict.update(keys[2], avg_loss)
     logger_dict.update(keys[3], avg_acc1)
 
-    writer.add_scalar("Loss/val", avg_loss, epoch)
-    writer.add_scalar("Acc/val", avg_acc1, epoch)
+    # writer.add_scalar("Loss/val", avg_loss, epoch)
+    # writer.add_scalar("Acc/val", avg_acc1, epoch)
 
 
     return avg_acc1
@@ -390,8 +392,10 @@ def validate(val_loader, model, criterion, lr, args, epoch=None):
 if __name__ == '__main__':
     parser = init_parser()
     args = parser.parse_args()
+
+    now = datetime.datetime.now()
     global save_path
-    global writer
+    # global writer
 
     # random seed
 
@@ -414,12 +418,12 @@ if __name__ == '__main__':
     if args.is_LSA:
         model_name += "-LSA"
 
-    model_name += f"-{args.tag}-{args.dataset}-LR[{args.lr}]-Seed{args.seed}"
+    model_name += f"-{args.tag}-{args.dataset}-LR[{args.lr}]-Seed{args.seed}-{now.isoformat()}"
     save_path = os.path.join(os.getcwd(), 'save', model_name)
     if save_path:
         os.makedirs(save_path, exist_ok=True)
 
-    writer = SummaryWriter(os.path.join(os.getcwd(), 'tensorboard', model_name))
+    # writer = SummaryWriter(os.path.join(os.getcwd(), 'tensorboard', model_name))
 
     # logger
 
