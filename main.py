@@ -30,6 +30,9 @@ best_acc1 = 0
 MODELS = ['vit', 'swin', 'pit', 'cait', 't2t']
 
 
+have_cuda = torch.cuda.is_available()
+
+
 def init_parser():
     parser = argparse.ArgumentParser(description='CIFAR10 quick training script')
     # Data args
@@ -72,20 +75,22 @@ def init_parser():
     parser.add_argument('--re_r1', default=0.3, type=float, help='aspect of erasing area')
     parser.add_argument('--is_LSA', action='store_true', help='Locality Self-Attention')
     parser.add_argument('--is_SPT', action='store_true', help='Shifted Patch Tokenization')
-    parser.add_argument('--swiglu', action='store_true', help='Use swiglu')
+    parser.add_argument('--ffn_act', help='FFN activation')
     return parser
 
 
 def main(args):
     global best_acc1
 
-    torch.cuda.set_device(args.gpu)
+    if have_cuda:
+        torch.cuda.set_device(args.gpu)
 
     data_info = datainfo(logger, args)
 
     model = create_model(data_info['img_size'], data_info['n_classes'], args)
 
-    model.cuda(args.gpu)
+    if have_cuda:
+        model.cuda(args.gpu)
 
     print(Fore.GREEN+'*'*80)
     logger.debug(f"Creating model: {model_name}")

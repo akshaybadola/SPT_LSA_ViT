@@ -68,6 +68,19 @@ class FeedForwardSwiGlu(nn.Module):
         return self.w3(self.silu(self.w1(x)) * self.w2(x))
 
 
+class FeedForwardStuGlu(nn.Module):
+    def __init__(self, dim, num_patches, hidden_dim, dropout=0.):
+        super().__init__()
+        self.dim = dim
+        self.w1 = nn.Parameter(data=torch.randn(self.dim))
+        self.silu = nn.SiLU()
+
+    def forward(self, x):
+        # if x.shape[0] == 128:
+        #     import ipdb; ipdb.set_trace()
+        return self.silu(x) * self.w1
+
+
 class Attention(nn.Module):
     def __init__(self, dim, num_patches, heads=8, dim_head=64, dropout=0., is_LSA=False):
         super().__init__()
@@ -125,31 +138,28 @@ class Attention(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, dim, num_patches, depth, heads, dim_head,
                  mlp_dim_ratio, dropout = 0., stochastic_depth=0., is_LSA=False,
-                 swiglu=False):
+                 ffn_act=""):
         super().__init__()
         self.layers = nn.ModuleList([])
         self.scale = {}
-        self.use_swiglu = swiglu
-        print("Will use SwiGLU")
-
-        if self.use_swiglu:
-            for i in range(depth):
-                self.layers.append(nn.ModuleList([
-                    PreNorm(num_patches, dim, Attention(dim, num_patches,
-                                                        heads=heads, dim_head=dim_head,
-                                                        dropout=dropout, is_LSA=is_LSA)),
-                    PreNorm(num_patches, dim, FeedForwardSwiGlu(dim, num_patches,
-                                                                dim * mlp_dim_ratio, dropout=dropout))
-                ]))
+        if ffn_act == "swiglu":
+            print("Will use SwiGLU")
+            feedforward = FeedForwardSwiGlu
+        elif ffn_act == "stuglu":
+            print("Will use StuGLU")
+            feedforward = FeedForwardStuGlu
         else:
-            for i in range(depth):
-                self.layers.append(nn.ModuleList([
-                    PreNorm(num_patches, dim, Attention(dim, num_patches,
-                                                        heads=heads, dim_head=dim_head,
-                                                        dropout=dropout, is_LSA=is_LSA)),
-                    PreNorm(num_patches, dim, FeedForward(dim, num_patches,
-                                                          dim * mlp_dim_ratio, dropout=dropout))
-                ]))
+            print("Will use GeLU")
+            feedforward = FeedForward
+
+        for i in range(depth):
+            self.layers.append(nn.ModuleList([
+                PreNorm(num_patches, dim, Attention(dim, num_patches,
+                                                    heads=heads, dim_head=dim_head,
+                                                    dropout=dropout, is_LSA=is_LSA)),
+                PreNorm(num_patches, dim, feedforward(dim, num_patches,
+                                                      dim * mlp_dim_ratio, dropout=dropout))
+            ]))
         self.drop_path = DropPath(stochastic_depth) if stochastic_depth > 0 else nn.Identity()
 
     def forward(self, x):
@@ -164,7 +174,7 @@ class ViT(nn.Module):
     def __init__(self, *, img_size, patch_size, num_classes, dim, depth, heads,
                  mlp_dim_ratio, channels=3, dim_head=16, dropout=0.,
                  emb_dropout=0., stochastic_depth=0., is_LSA=False, is_SPT=False,
-                 swiglu=False):
+                 ffn_act=""):
         super().__init__()
         image_height, image_width = pair(img_size)
         patch_height, patch_width = pair(patch_size)
@@ -188,7 +198,7 @@ class ViT(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
         self.transformer = Transformer(self.dim, self.num_patches, depth, heads,
                                        dim_head, mlp_dim_ratio, dropout,
-                                       stochastic_depth, is_LSA=is_LSA, swiglu=swiglu)
+                                       stochastic_depth, is_LSA=is_LSA, ffn_act=ffn_act)
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(self.dim),
