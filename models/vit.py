@@ -73,12 +73,29 @@ class FeedForwardStuGlu(nn.Module):
         super().__init__()
         self.dim = dim
         self.w1 = nn.Parameter(data=torch.randn(self.dim))
+        self.w2 = nn.Parameter(data=torch.randn(self.dim))
         self.silu = nn.SiLU()
 
     def forward(self, x):
         # if x.shape[0] == 128:
         #     import ipdb; ipdb.set_trace()
-        return self.silu(x) * self.w1
+        # return self.silu(x) * self.w1
+        # return self.w1 * self.silu(x) + self.w2
+        # return self.silu(self.w1 * x) + self.w2 # 33 first epoch
+        return self.silu(self.w1 * x)   # 35 first epoch
+        # return self.silu(self.w1 * x) * self.w2  # 33 first epoch
+
+
+class FeedForwardLinear(nn.Module):
+    def __init__(self, dim, num_patches, hidden_dim, dropout=0.):
+        super().__init__()
+        self.dim = dim
+        self.w1 = nn.Linear(self.dim, self.dim)
+        self.w2 = nn.Parameter(data=torch.randn(self.dim))
+        self.silu = nn.SiLU()
+
+    def forward(self, x):
+        return self.silu(self.w1(x)) * self.w2
 
 
 class Attention(nn.Module):
@@ -107,6 +124,8 @@ class Attention(nn.Module):
             self.mask = None
 
     def forward(self, x):
+        if x.shape[0] == 128:
+            import ipdb; ipdb.set_trace()
         b, n, _, h = *x.shape, self.heads
         qkv = self.to_qkv(x).chunk(3, dim = -1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = h), qkv)
@@ -148,6 +167,9 @@ class Transformer(nn.Module):
         elif ffn_act == "stuglu":
             print("Will use StuGLU")
             feedforward = FeedForwardStuGlu
+        elif ffn_act == "linear":
+            print("Will use Linear")
+            feedforward = FeedForwardLinear
         else:
             print("Will use GeLU")
             feedforward = FeedForward
