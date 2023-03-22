@@ -76,6 +76,7 @@ def init_parser():
     parser.add_argument('--is_LSA', action='store_true', help='Locality Self-Attention')
     parser.add_argument('--is_SPT', action='store_true', help='Shifted Patch Tokenization')
     parser.add_argument('--ffn_act', help='FFN activation')
+    parser.add_argument('--save_suffix')
     return parser
 
 
@@ -221,6 +222,7 @@ def main(args):
         lr = train(train_loader, model, criterion, optimizer, epoch, scheduler, args)
         acc1 = validate(val_loader, model, criterion, lr, args, epoch=epoch)
         torch.save({
+            'args': args.__dict__,
             'model_state_dict': model.state_dict(),
             'epoch': epoch,
             'optimizer_state_dict': optimizer.state_dict(),
@@ -235,11 +237,12 @@ def main(args):
             best_acc1 = acc1
 
             torch.save({
-                    'model_state_dict': model.state_dict(),
-                    'epoch': epoch,
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                }, os.path.join(save_path, 'best.pth'))
+                'args': args.__dict__,
+                'model_state_dict': model.state_dict(),
+                'epoch': epoch,
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+            }, os.path.join(save_path, 'best.pth'))
 
         print(f'Best acc1 {best_acc1:.2f}')
         print('*'*80)
@@ -425,6 +428,8 @@ if __name__ == '__main__':
 
     model_name += f"-{args.tag}-{args.dataset}-LR[{args.lr}]-Seed{args.seed}-{now.isoformat()}"
     save_path = os.path.join(os.getcwd(), 'save', model_name)
+    if args.save_suffix:
+        save_path += f"_{args.save_suffix}"
     if save_path:
         os.makedirs(save_path, exist_ok=True)
 

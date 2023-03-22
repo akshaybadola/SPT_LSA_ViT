@@ -82,9 +82,21 @@ class FeedForwardStuGlu(nn.Module):
         # return self.silu(x) * self.w1
         # return self.w1 * self.silu(x) + self.w2
         # return self.silu(self.w1 * x) + self.w2 # 33 first epoch
-        return self.silu(self.w1 * x)   # 35 first epoch
+        # return self.silu(self.w1 * x)   # 35 first epoch
         # return self.silu(self.w1 * x) * self.w2  # 33 first epoch
+        return self.silu(self.w1 * x)   # 35 first epoch
 
+
+class FeedForwardSwiDot(nn.Module):
+    def __init__(self, dim, num_patches, hidden_dim, dropout=0.):
+        super().__init__()
+        self.dim = dim
+        self.w1 = nn.Parameter(data=torch.randn(self.dim))
+        self.w2 = nn.Parameter(data=torch.randn(self.dim))
+        self.silu = nn.SiLU()
+
+    def forward(self, x):
+        return self.silu(self.w1 * x) + self.w2 * x
 
 class FeedForwardLinear(nn.Module):
     def __init__(self, dim, num_patches, hidden_dim, dropout=0.):
@@ -93,9 +105,15 @@ class FeedForwardLinear(nn.Module):
         self.w1 = nn.Linear(self.dim, self.dim)
         self.w2 = nn.Parameter(data=torch.randn(self.dim))
         self.silu = nn.SiLU()
+        self.gelu = nn.GELU()
+        self.relu = nn.ReLU()
 
     def forward(self, x):
-        return self.silu(self.w1(x)) * self.w2
+        # return self.silu(self.w1(x)) * self.w2  # 37.03 first epoch
+        # return self.relu(self.w1(x))  # 37.14 first epoch
+        # return self.silu(self.w1(x)) * self.w2  # 37.03 first epoch, 92.13, sd == 0
+        # return self.silu(self.w1(x))  # 37.8 first epoch, 91 overall sd == 0, same with sd == .1
+        return self.gelu(self.w1(x))  # 37.64 first epoch, 92.32, sd ==0
 
 
 class Attention(nn.Module):
@@ -124,8 +142,8 @@ class Attention(nn.Module):
             self.mask = None
 
     def forward(self, x):
-        if x.shape[0] == 128:
-            import ipdb; ipdb.set_trace()
+        # if x.shape[0] == 128:
+        #     import ipdb; ipdb.set_trace()
         b, n, _, h = *x.shape, self.heads
         qkv = self.to_qkv(x).chunk(3, dim = -1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = h), qkv)
@@ -170,6 +188,9 @@ class Transformer(nn.Module):
         elif ffn_act == "linear":
             print("Will use Linear")
             feedforward = FeedForwardLinear
+        elif ffn_act == "swidot":
+            print("Will use SwiDot")
+            feedforward = FeedForwardSwiDot
         else:
             print("Will use GeLU")
             feedforward = FeedForward
@@ -244,4 +265,4 @@ class ViT(nn.Module):
 
         x = self.transformer(x)
 
-        return self.mlp_head(x[:, 0])
+        return self.mlp_head(x.mean(1))
