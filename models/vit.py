@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn, einsum
 from utils.drop_path import DropPath
@@ -127,8 +128,8 @@ class Attention(nn.Module):
         self.dim = dim
         self.inner_dim = inner_dim
         self.attend = nn.Softmax(dim=-1)
-        self.to_qkv = nn.Linear(self.dim, self.inner_dim * 3, bias=False)
-        init_weights(self.to_qkv)
+        self.QKV = nn.Linear(self.dim, self.inner_dim * 3, bias=False)
+        init_weights(self.QKV)
         self.to_out = nn.Sequential(
             nn.Linear(self.inner_dim, self.dim),
             nn.Dropout(dropout)
@@ -141,11 +142,11 @@ class Attention(nn.Module):
         else:
             self.mask = None
 
-    def forward(self, x):
+    def forward_alt(self, x):
         # if x.shape[0] == 128:
         #     import ipdb; ipdb.set_trace()
         b, n, _, h = *x.shape, self.heads
-        qkv = self.to_qkv(x).chunk(3, dim = -1)
+        qkv = self.QKV(x).chunk(3, dim = -1)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = h), qkv)
 
         if self.mask is None:
@@ -161,6 +162,28 @@ class Attention(nn.Module):
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
 
         out = rearrange(out, 'b h n d -> b n (h d)')
+        return self.to_out(out)
+
+    def forward(self, x):
+        if x.shape[0] == 128:
+            import ipdb; ipdb.set_trace()
+        b, z, _, h = *x.shape, self.heads
+        qkv = self.QKV(x).chunk(3, dim = -1)
+        q, k, v = map(lambda t: rearrange(t, 'b z (h d) -> b h z d', h = h), qkv)
+
+        if self.mask is None:
+            dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+
+        else:
+            scale = self.scale
+            dots = torch.mul(einsum('b h i d, b h j d -> b h i j', q, k),
+                             scale.unsqueeze(0).unsqueeze(-1).unsqueeze(-1).expand((b, h, 1, 1)))
+            dots[:, :, self.mask[:, 0], self.mask[:, 1]] = -987654321
+
+        attn = self.attend(dots)
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+
+        out = rearrange(out, 'b h z d -> b z (h d)')
         return self.to_out(out)
 
     def flops(self):
